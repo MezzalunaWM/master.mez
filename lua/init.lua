@@ -7,7 +7,7 @@
 ---@field builtins Builtins
 local M = {};
 
-M.builtins = require("master.builtins")
+-- M.builtins = require("master.builtins")
 
 ---@class MasterConfig
 ---@field master_ratio number
@@ -21,8 +21,8 @@ local default_config = {
 	tag_count = 5,
 	focus_on_spawn = true,
 	refocus_on_kill = true,
-	screen_gap = 10,
-	tile_gap = 10
+	screen_gap = 12,
+	tile_gap = 7
 }
 
 ---@class MasterTag
@@ -45,8 +45,9 @@ local create_state = function(config)
 	end
 
 	return {
-		tag_id = 0,
-		tags = tags
+		tag_id = 1,
+		tags = tags,
+		master_ratio = config.master_ratio
 	}
 end
 
@@ -60,6 +61,8 @@ M.setup = function(config)
 	--- Here we need to validate the config
 	--- DON'T FORGET TO VALIDATE THE CONFIG
 
+	config = default_config
+
 	M.state = create_state(config)
 
 	---@param tag_id number
@@ -69,41 +72,43 @@ M.setup = function(config)
 		local res = mez.output.get_resolution(0)
 
 		if #tag.stack == 0 then
+			print("MASTER: tiling just master")
 			mez.view.set_position(tag.master, config.screen_gap, config.screen_gap)
 			mez.view.set_size(
 				tag.master,
 				res.width - config.screen_gap * 2,
 				res.height - config.screen_gap * 2)
 		else
+			print("MASTER: master and stack")
 			mez.view.set_position(tag.master, config.screen_gap, config.screen_gap)
 			mez.view.set_size(
 				tag.master,
 				res.width * M.state.master_ratio - config.screen_gap - config.tile_gap,
 				res.height - config.screen_gap * 2)
 
-			local stack_x = (res.width * (1 - M.state.master_ratio)) - config.tile_gap - config.screen_gap
+			local stack_x = (res.width * (1 - M.state.master_ratio))
 			local stack_width = res.width * (1 - M.state.master_ratio) - config.tile_gap - config.screen_gap
+			local stack_height = (res.height - (config.screen_gap * 2) - ((#tag.stack - 1) * config.tile_gap)) / #tag.stack
 
 			for i, view_id in ipairs(tag.stack) do
 				mez.view.set_position(view_id,
 					stack_x,
-					(res.height / #tag.stack + config.tile_gap) * (i - 1) + config.screen_gap)
+					(stack_height + config.tile_gap) * (i - 1) + config.screen_gap)
 
-				mez.view.set_size(view_id,
-					stack_width,
-					res.height / #tag.stack - config.screen_gap * 2 - config.tile_gap * (#tag.stack - 1))
+				mez.view.set_size(view_id, stack_width, stack_height)
 			end
 		end
 	end
 
 	mez.hook.add("ViewMapPre", {
 		callback = function(view_id)
-			local curr_tag = M.state.tags[M.state.tag_id]
 
-			if curr_tag.master == nil then
-				curr_tag.master = view_id
+			local tag = M.state.tags[M.state.tag_id]
+
+			if tag.master == nil then
+				tag.master = view_id
 			else
-				table.insert(curr_tag.stack, #curr_tag.stack + 1, view_id)
+				table.insert(tag.stack, #tag.stack + 1, view_id)
 			end
 
 			if config.focus_on_spawn then mez.view.set_focused(view_id) end
@@ -123,7 +128,9 @@ M.setup = function(config)
 			---@type number | nil
 			local view_idx = nil
 
-			for i, curr_tag in ipairs[M.state.tags] do
+			print("made it here")
+
+			for i, curr_tag in ipairs(M.state.tags) do
 				local t = M.state.tags[i]
 
 				--- If view is the master
