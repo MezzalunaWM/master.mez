@@ -189,6 +189,8 @@ end
 
 ---@param view_id number
 M.remove_view = function(view_id)
+  if view_id == 0 then view_id = mez.view.get_focused_id() end
+
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
 	local tag = M.state.tags[tag_idx]
@@ -204,6 +206,7 @@ M.remove_view = function(view_id)
 		end
 	elseif type == "stacking" then
 		local is_last = #tag.stack == view_idx
+
 		table.remove(tag.stack, view_idx)
 
 		if M.config.refocus_on_kill then
@@ -214,6 +217,7 @@ M.remove_view = function(view_id)
 			end
 		end
 	end
+
 	M.tile_tag(tag_idx)
 end
 
@@ -225,7 +229,24 @@ M.tag_enable = function (tag_idx)
 		local tag = M.state.tags[t]
 
 		if enabled then
-			if tag.last_focused ~= nil then mez.view.set_focused(tag.last_focused) end
+			if tag.last_focused ~= nil then
+
+        if utils.find_view(tag.last_focused) == nil then
+          if tag.master then
+            mez.view.set_focused(tag.master)
+          elseif #tag.floating ~= 0 then
+            mez.view.set_focused(tag.floating[1])
+          end
+        else
+          mez.view.set_focused(tag.last_focused)
+        end
+      else
+        if tag.master then
+          mez.view.set_focused(tag.master)
+        elseif #tag.floating ~= 0 then
+          mez.view.set_focused(tag.floating[1])
+        end
+      end
 		else
 			tag.last_focused = mez.view.get_focused_id()
 		end
@@ -326,12 +347,35 @@ M.set_fullscreen = function (view_id)
 	end
 end
 
----@param config MasterConfig
-M.setup = function(config)
-	--- Here we need to validate the config
-	--- DON'T FORGET TO VALIDATE THE CONFIG
+---@param view_id number
+---@param tag_id number
+M.send_view = function (view_id, tag_id)
+  if view_id == 0 then view_id = mez.view.get_focused_id() end
+  if tag_id == M.state.tag_id then return end
 
-	--- TODO: Take the user config into consideration
+	local type, _, _ = utils.find_view(view_id)
+
+  local tag = M.state.tags[tag_id]
+
+  M.remove_view(view_id)
+
+  if type == "floating" then
+    table.insert(tag.floating, #tag.floating, view_id)
+  else
+    if tag.master == nil then
+      tag.master = view_id
+    else
+      table.insert(tag.stack, #tag.stack, view_id)
+    end
+  end
+
+  mez.view.set_enabled(view_id, false)
+  M.tile_tag(M.state.tag_id)
+  M.tile_tag(tag_id)
+end
+
+M.setup = function()
+  --- Take a user config
 	M.config = default_config
 
 	M.state = {
@@ -363,6 +407,11 @@ M.setup = function(config)
 	for i = 1, M.config.tag_count do
 		mez.input.add_keymap("alt", i, { press = function () M.tag_enable(i) end })
 	end
+
+  -- Wow this is ass
+	--  for i, k in ipairs({"exclam", "at", "numbersign", "dollar", "percent"}) do
+	-- 	mez.input.add_keymap("alt|shift", k, { press = function () M.send_view(0, i) end })
+	-- end
 
 	mez.input.add_mousemap("alt", "BTN_LEFT", {
 		press = function(view_id) M.make_float(view_id) end,
